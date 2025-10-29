@@ -25,24 +25,19 @@ stages:
       displayName: 'Instalar Terraform'
       inputs:
         terraformVersion: '$(tf_version)'
-    
-    - task: TerraformInstaller@0
+
+    - script: |
+        echo "Inicializando Terraform con backend GCS..."
+        terraform init
       displayName: 'Inicializar Terraform'
-      inputs:
-        command: 'init'
-        workingDirectory: '$(System.DefaultWorkingDirectory)'
-        backendServiceArm: '$(GCP_SERVICE_CONNECTION)'
-        backendAzureRmResourceGroupName: '$(TERRAFORM_STORAGE_RG)'
-        backendAzureRmStorageAccountName: '$(TERRAFORM_STORAGE_ACCOUNT)'
-        backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'terraform.tfstate'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/ruta/a/tu/codigo'
 
     - task: TerraformTaskV4@4
       displayName: 'Validar configuración de Terraform'
       inputs:
         provider: 'gcp'
         command: 'validate'
-        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/ruta/a/tu/codigo'
 
 - stage: Plan
   displayName: 'Plan de ejecución de Terraform'
@@ -54,26 +49,26 @@ stages:
       displayName: 'Instalar Terraform'
       inputs:
         terraformVersion: '$(tf_version)'
-    
+
     - task: TerraformTaskV4@4
       displayName: 'Ejecutar terraform plan'
       inputs:
         provider: 'gcp'
         command: 'plan'
-        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/ruta/a/tu/codigo'
         environmentServiceNameGCP: '$(GCP_SERVICE_CONNECTION)'
         commandOptions: '-out=tfplan'
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publicar plan de Terraform'
       inputs:
-        pathtoPublish: '$(System.DefaultWorkingDirectory)/tfplan'
+        pathtoPublish: '$(System.DefaultWorkingDirectory)/ruta/a/tu/codigo/tfplan'
         artifactName: 'terraform-plan'
 
 - stage: Apply
   displayName: 'Aplicar cambios en GCP'
   dependsOn: Plan
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
   jobs:
   - deployment: Apply
     environment: 'gcp-$(environment)'
@@ -83,17 +78,17 @@ stages:
           steps:
           - download: current
             artifact: 'terraform-plan'
-          
+
           - task: TerraformInstaller@1
             displayName: 'Instalar Terraform'
             inputs:
               terraformVersion: '$(tf_version)'
-          
+
           - task: TerraformTaskV4@4
             displayName: 'Aplicar cambios de Terraform'
             inputs:
               provider: 'gcp'
               command: 'apply'
-              workingDirectory: '$(System.DefaultWorkingDirectory)'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/ruta/a/tu/codigo'
               environmentServiceNameGCP: '$(GCP_SERVICE_CONNECTION)'
-              commandOptions: '-auto-approve tfplan'
+              commandOptions: 'tfplan'
