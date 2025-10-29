@@ -2,7 +2,7 @@ trigger:
   - main  # Se activa con cambios en la rama main
 
 pool:
-  vmImage: 'ubuntu-latest'  # Usamos una imagen de Linux para Terraform
+  vmImage: 'Rocky-latest'  # Usamos una imagen de Linux para Terraform
 
 variables:
   - group: gcp-credentials  # Grupo de variables para las credenciales de GCP
