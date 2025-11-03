@@ -1,76 +1,67 @@
-# Variables generales
 variable "project_id" {
-  description = "ID del proyecto de GCP"
+  description = "ID del proyecto GCP"
   type        = string
-  default     = "proyectospring-476500"
+  default     = "DevOpsLab"
 }
 
 variable "region" {
-  description = "Región de GCP donde se desplegarán los recursos"
-  type        = string
-  default     = "us-central1"
+  type    = string
+  default = "us-central1"
 }
 
 variable "zone" {
-  description = "Zona de GCP donde se desplegará la instancia"
-  type        = string
-  default     = "us-central1-a"
+  type    = string
+  default = "us-central1-a"
 }
 
-# Variables de red
-variable "network_name" {
-  description = "Nombre de la VPC"
-  type        = string
-  default     = "devops-network"
+variable "vpc_name" {
+  type    = string
+  default = "devops-spring-network"
+}
+
+variable "subnet_name" {
+  type    = string
+  default = "devops-spring-subnet"
 }
 
 variable "subnet_cidr" {
-  description = "Rango CIDR para la subred"
-  type        = string
-  default     = "10.0.1.0/24"
+  type    = string
+  default = "192.168.10.0/24"
 }
 
-# Variables de la instancia
-variable "instance_name" {
-  description = "Nombre de la instancia de Compute Engine"
-  type        = string
-  default     = "devops-instance"
-}
-
-variable "machine_type" {
-  description = "Tipo de máquina para la instancia"
-  type        = string
-  default     = "e2-micro"
-}
-
-variable "docker_image" {
-  description = "Imagen de Docker a desplegar"
-  type        = string
-  default     = "nginx:latest"
-}
-
-# Variables de autenticación
 variable "ssh_user" {
-  description = "Usuario SSH para acceder a la instancia"
-  type        = string
-  default     = "terraform"
+  type    = string
+  default = "devops"
 }
 
-variable "ssh_public_key_path" {
-  description = "Ruta al archivo de clave pública SSH"
+variable "ssh_public_key" {
+  description = "Clave pública SSH (formato: ssh-rsa ...)"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
+  default     = ""
 }
 
-# Variables de entorno
-variable "environment" {
-  description = "Entorno de despliegue (dev, staging, prod)"
-  type        = string
-  default     = "dev"
+variable "ssh_port" {
+  type    = number
+  default = 22025
 }
 
-variable "enable_os_login" {
-  description = "Habilitar OS Login para la instancia"
-  type        = bool
-  default     = true
+variable "allowed_ssh_cidr" {
+  description = "IP pública permitida para SSH."
+  type        = string
+  default     = "190.130.148.144/32"
+}
+
+variable "instance_name" {
+  type    = string
+  default = "devops-spring-instance"
+}
+
+variable "instance_machine_type" {
+  type    = string
+  default = "e2-micro"
+}
+
+variable "boot_disk_size_gb" {
+  type    = number
+  default = 30
 }

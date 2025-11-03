@@ -1,58 +1,43 @@
 #!/bin/bash
+set -e
 
-# Actualizar el sistema
-apt-get update -y
-apt-get upgrade -y
+SSH_USER="${ssh_user}"
+SSH_PORT=${ssh_port}
 
-# Instalar dependencias
-apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release
+# 1) Crear usuario
+if ! id -u ${SSH_USER} >/dev/null 2>&1; then
+  useradd -m -s /bin/bash ${SSH_USER}
+  echo "${SSH_USER} ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/${SSH_USER}
+fi
 
-# Agregar clave GPG oficial de Docker
-curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+mkdir -p /home/${SSH_USER}/.ssh
+chmod 700 /home/${SSH_USER}/.ssh
+chown -R ${SSH_USER}:${SSH_USER} /home/${SSH_USER}/.ssh
 
-# Configurar el repositorio estable de Docker
-echo \
-  "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
-  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+# 2) Instalar Docker y Docker Compose
+dnf -y update
+dnf -y install -y yum-utils
+dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+dnf -y install -y docker-ce docker-ce-cli containerd.io
 
-# Instalar Docker Engine
-apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io
+systemctl enable --now docker
 
-# Iniciar y habilitar Docker
-systemctl start docker
-systemctl enable docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+DOCKER_COMPOSE_VERSION="v2.22.0"
+curl -SL "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-# Instalar Docker Compose
-curl -L "https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+usermod -aG docker ${SSH_USER}
 
-# Crear usuario para Docker (opcional)
-# useradd -m -s /bin/bash dockeruser
-# usermod -aG docker dockeruser
+# 3) Cambiar puerto SSH
+cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+if grep -q "^#Port" /etc/ssh/sshd_config || ! grep -q "^Port ${SSH_PORT}" /etc/ssh/sshd_config; then
+  sed -i "s/^#Port .*/Port ${SSH_PORT}/g" /etc/ssh/sshd_config || true
+  if ! grep -q "^Port ${SSH_PORT}" /etc/ssh/sshd_config; then
+    echo "Port ${SSH_PORT}" >> /etc/ssh/sshd_config
+  fi
+fi
 
-# Desplegar la aplicación
-cat > /home/ubuntu/docker-compose.yml << EOF
-version: '3'
-services:
-  app:
-    image: ${docker_image}
-    container_name: app
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - NODE_ENV=production
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-EOF
+systemctl restart sshd || true
 
-# Iniciar la aplicación
-cd /home/ubuntu
-docker-compose up -d
+echo "Instalación base completada."

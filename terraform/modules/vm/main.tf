@@ -1,125 +1,73 @@
-# IP pública estática
-resource "google_compute_address" "static_ip" {
-  name = "${var.instance_name}-ip"
+variable "project_id" {}
+variable "region" {}
+variable "zone" {}
+variable "instance_name" {}
+variable "machine_type" {}
+variable "boot_disk_size_gb" {}
+variable "network" {}
+variable "subnetwork" {}
+variable "ssh_user" {}
+variable "ssh_public_key" {}
+variable "ssh_port" {}
+variable "allowed_ssh_cidr" {}
+
+data "google_compute_image" "rocky" {
+  family  = "rocky-9"
+  project = "rocky-linux-cloud"
 }
 
-# Instancia de Compute Engine
+resource "google_compute_address" "static_ip" {
+  name   = "devops-spring-ip"
+  region = var.region
+}
+
 resource "google_compute_instance" "vm" {
   name         = var.instance_name
   machine_type = var.machine_type
   zone         = var.zone
-  tags         = var.tags
-  
+
   boot_disk {
     initialize_params {
-      image = "debian-cloud/debian-11"
-      size  = 30  # GB
-      type  = "pd-ssd"
+      image = data.google_compute_image.rocky.self_link
+      size  = var.boot_disk_size_gb
     }
   }
-  
+
   network_interface {
-    network    = var.network
     subnetwork = var.subnetwork
-    
     access_config {
       nat_ip = google_compute_address.static_ip.address
     }
   }
-  
+
   metadata = {
-    ssh-keys = "${var.ssh_user}:${var.ssh_public_key}"
+    ssh-keys       = "${var.ssh_user}:${var.ssh_public_key}"
+    startup-script = templatefile("${path.module}/startup.tpl", {
+                        ssh_user = var.ssh_user,
+                        ssh_port = var.ssh_port
+                      })
   }
-  
-  metadata_startup_script = var.startup_script
-  
-  service_account {
-    scopes = ["cloud-platform"]
-  }
-  
-  # Habilitar IP forwarding si es necesario
-  can_ip_forward = false
-  
-  # Habilitar eliminación de protección
-  deletion_protection = false
-  
-  # Habilitar protección contra eliminación de discos
-  boot_disk {
-    auto_delete = true
-    device_name = "${var.instance_name}-boot"
-    
-    initialize_params {
-      image = "debian-cloud/debian-11"
-      size  = 30
-      type  = "pd-ssd"
-    }
-  }
-  
-  # Configuración de metadatos
-  metadata = {
-    enable-oslogin = var.enable_os_login
-  }
-  
-  # Configuración de etiquetas
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-  }
+
+  tags = ["devops-spring"]
 }
 
-# Reglas de firewall para la instancia
-resource "google_compute_firewall" "allow_http" {
-  name    = "${var.instance_name}-allow-http"
+resource "google_compute_firewall" "allow_ssh_custom" {
+  name    = "${var.instance_name}-allow-ssh-custom"
   network = var.network
-  
+
   allow {
     protocol = "tcp"
-    ports    = ["80"]
+    ports    = [tostring(var.ssh_port)]
   }
-  
-  target_tags = ["http-server"]
-  source_ranges = ["0.0.0.0/0"]
-}
 
-resource "google_compute_firewall" "allow_https" {
-  name    = "${var.instance_name}-allow-https"
-  network = var.network
-  
-  allow {
-    protocol = "tcp"
-    ports    = ["443"]
-  }
-  
-  target_tags = ["https-server"]
-  source_ranges = ["0.0.0.0/0"]
-}
-
-resource "google_compute_firewall" "allow_ssh" {
-  name    = "${var.instance_name}-allow-ssh"
-  network = var.network
-  
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-  
-  target_tags = ["ssh"]
-  source_ranges = ["0.0.0.0/0"]  # En producción, restringir a IPs específicas
-}
-
-# Outputs
-output "instance_id" {
-  value = google_compute_instance.vm.instance_id
+  source_ranges = [var.allowed_ssh_cidr]
+  target_tags   = ["devops-spring"]
 }
 
 output "instance_name" {
   value = google_compute_instance.vm.name
 }
 
-output "instance_public_ip" {
+output "instance_ip" {
   value = google_compute_address.static_ip.address
-}
-
-output "instance_private_ip" {
-  value = google_compute_instance.vm.network_interface[0].network_ip
 }
