@@ -1,0 +1,40 @@
+name: Terraform Deploy GCP
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: Deploy Infra to GCP
+    runs-on: ubuntu-latest
+
+    env:
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      GOOGLE_PROJECT: "tu-proyecto-id"          # Reemplaza con el ID de tu proyecto GCP
+      GOOGLE_REGION: "us-central1"              # Reemplaza con tu región
+      GOOGLE_ZONE: "us-central1-a"              # Reemplaza con tu zona
+      TF_WORKING_DIR: "./infra"                 # Carpeta donde están tus .tf (ajusta si es distinto)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8               # Ajusta a tu versión preferida
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
