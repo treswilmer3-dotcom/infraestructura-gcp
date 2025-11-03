@@ -8,33 +8,33 @@ on:
 
 jobs:
   terraform:
-    name: Deploy Infra to GCP
+    name: Deploy Infraestructura GCP
     runs-on: ubuntu-latest
 
     env:
       GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
-      GOOGLE_PROJECT: "tu-proyecto-id"          # Reemplaza con el ID de tu proyecto GCP
-      GOOGLE_REGION: "us-central1"              # Reemplaza con tu región
-      GOOGLE_ZONE: "us-central1-a"              # Reemplaza con tu zona
-      TF_WORKING_DIR: "./infra"                 # Carpeta donde están tus .tf (ajusta si es distinto)
+      GOOGLE_PROJECT: "proyectopruebasvale"
+      GOOGLE_REGION: "us-central1"
+      GOOGLE_ZONE: "us-central1-a"
+      TF_WORKING_DIR: "."
 
     steps:
-      - name: Checkout repository
+      - name: 🧩 Checkout del código
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: ⚙️ Instalar Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8               # Ajusta a tu versión preferida
+          terraform_version: 1.9.8
 
-      - name: Terraform Init
+      - name: 🏗️ Inicializar Terraform
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
-      - name: Terraform Plan
+      - name: 📋 Plan de ejecución
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform plan -out=tfplan
 
-      - name: Terraform Apply
+      - name: 🚀 Aplicar cambios
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
