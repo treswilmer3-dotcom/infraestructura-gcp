@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "ID del proyecto GCP"
+  description = "proyectopruebasvale" #ID del proyecto GCP
   type        = string
   default     = "DevOpsLab"
 }
