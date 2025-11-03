@@ -19,22 +19,22 @@ jobs:
       TF_WORKING_DIR: "."
 
     steps:
-      - name: 🧩 Checkout del código
+      - name: Checkout del código
         uses: actions/checkout@v4
 
-      - name: ⚙️ Instalar Terraform
+      - name: Instalar Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      - name: 🏗️ Inicializar Terraform
+      - name:  Inicializar Terraform
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
-      - name: 📋 Plan de ejecución
+      - name: Plan de ejecución
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform plan -out=tfplan
 
-      - name: 🚀 Aplicar cambios
+      - name: Aplicar cambios
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
