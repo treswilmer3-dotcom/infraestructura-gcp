@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "El ID del proyecto de GCP"
   type        = string
-  default     = "ProyectoSpring"
+  default     = "proyectospring-476500"
 }
 
 variable "region" {
@@ -49,11 +49,41 @@ variable "docker_image" {
 variable "ssh_user" {
   description = "Usuario SSH para acceder a la instancia"
   type        = string
-  default     = "devops-user"
+  default     = "terraform"
 }
 
 variable "ssh_public_key_path" {
-  description = "Ruta completa a la clave pública SSH"
+  description = "Ruta al archivo de clave pública SSH"
   type        = string
-  default     = "C:\\Users\\Terminal\\.ssh\\id_rsa.pub"
+  default     = "~/.ssh/id_rsa.pub"
+}
+
+variable "allowed_ips" {
+  description = "Lista de rangos IP permitidos para SSH y otros accesos"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]  # En producción, restringir esto a IPs específicas
+}
+
+variable "environment" {
+  description = "Entorno de despliegue (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "service_account_email" {
+  description = "Correo electrónico de la cuenta de servicio de GCP"
+  type        = string
+  default     = null
+}
+
+variable "enable_os_login" {
+  description = "Habilitar OS Login para la instancia"
+  type        = bool
+  default     = true
+}
+
+variable "enable_serial_port" {
+  description = "Habilitar puerto serie para la instancia"
+  type        = bool
+  default     = false
 }
