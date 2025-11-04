@@ -11,9 +11,9 @@ variable "ssh_public_key" {}
 variable "ssh_port" {}
 variable "allowed_ssh_cidr" {}
 
-data "google_compute_image" "rocky" {
-  family  = "rocky-9"
-  project = "rocky-linux-cloud"
+data "google_compute_image" "debian" {
+  family  = "debian-11"
+  project = "debian-cloud"
 }
 
 resource "google_compute_address" "static_ip" {
@@ -25,10 +25,11 @@ resource "google_compute_instance" "vm" {
   name         = var.instance_name
   machine_type = var.machine_type
   zone         = var.zone
+  tags         = ["devops-spring"]
 
   boot_disk {
     initialize_params {
-      image = data.google_compute_image.rocky.self_link
+      image = data.google_compute_image.debian.self_link
       size  = var.boot_disk_size_gb
     }
   }
@@ -41,14 +42,14 @@ resource "google_compute_instance" "vm" {
   }
 
   metadata = {
-    ssh-keys       = "${var.ssh_user}:${var.ssh_public_key}"
-    startup-script = templatefile("${path.module}/startup.tpl", {
-                        ssh_user = var.ssh_user,
-                        ssh_port = var.ssh_port
-                      })
+    ssh-keys = "${var.ssh_user}:${var.ssh_public_key}"
   }
 
-  tags = ["devops-spring"]
+  metadata_startup_script = file("${path.module}/startup.tpl")
+
+  service_account {
+    scopes = ["cloud-platform"]
+  }
 }
 
 resource "google_compute_firewall" "allow_ssh_custom" {

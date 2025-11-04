@@ -13,9 +13,9 @@ module "vm" {
   project_id        = var.project_id
   region            = var.region
   zone              = var.zone
-  instance_name     = var.instance_name
-  machine_type      = var.instance_machine_type
-  boot_disk_size_gb = var.boot_disk_size_gb
+  instance_name     = "devops-vm"
+  machine_type      = "e2-micro"
+  boot_disk_size_gb = 20
   network           = module.network.vpc_name
   subnetwork        = module.network.subnet_self_link
   ssh_user          = var.ssh_user
