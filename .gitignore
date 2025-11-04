@@ -1,0 +1,41 @@
+# Archivos de Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.tfstate.lock.info
+
+# Archivos de override
+*_override.tf
+*_override.tf.json
+
+# Archivos de crash log
+crash.log
+crash.*.log
+
+# Archivos de proveedores
+.terraformrc
+terraform.rc
+
+# Archivos sensibles que puedan contener credenciales
+*.pem
+*.key
+*.p12
+*.crt
+*.cer
+*.p7b
+
+# Archivos de IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
