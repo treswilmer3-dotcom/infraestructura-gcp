@@ -1,0 +1,43 @@
+name: infra-deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_CREDENTIALS: ${{ secrets.gsp-credentials }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.4.0
+
+      - name: Write GOOGLE_APPLICATION_CREDENTIALS file
+        run: |
+          echo "$GOOGLE_CREDENTIALS" > $HOME/gcp_creds.json
+          chmod 600 $HOME/gcp_creds.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp_creds.json" >> $GITHUB_ENV
+
+      - name: Set Terraform env vars
+        run: |
+          echo "TF_VAR_project_id=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" >> $GITHUB_ENV
+          echo "TF_VAR_allowed_ssh_cidr=190.130.148.144/32" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
