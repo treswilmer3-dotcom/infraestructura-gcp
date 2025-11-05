@@ -1,43 +1,120 @@
-name: infra-deploy
+name: 'Infraestructura como Código - Terraform'
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+
+# Configuración de concurrencia para evitar despliegues simultáneos
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   terraform:
+    name: 'Terraform'
     runs-on: ubuntu-latest
+    environment: production
     env:
-      GOOGLE_CREDENTIALS: ${{secrets.gsp-credentials}}
+      TF_IN_AUTOMATION: true
+      TF_INPUT: false
+      TF_WORKSPACE: default
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+    
     steps:
-      - name: Checkout repo
+      - name: 'Checkout Código'
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: 'Configurar Terraform'
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.4.0
+          terraform_version: '1.5.7'
+          terraform_wrapper: false
 
-      - name: Write GOOGLE_APPLICATION_CREDENTIALS file
+      - name: 'Configurar Credenciales GCP'
+        id: auth
         run: |
-          echo "$GOOGLE_CREDENTIALS" > $HOME/gcp_creds.json
-          chmod 600 $HOME/gcp_creds.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp_creds.json" >> $GITHUB_ENV
+          echo "${{ secrets.GCP_SA_KEY }}" > $GITHUB_WORKSPACE/gcp_creds.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp_creds.json" >> $GITHUB_ENV
+          echo "TF_VAR_project_id=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" >> $GITHUB_ENV
+          echo "TF_VAR_allowed_ssh_cidr=${{ github.event.client_payload.ip || '0.0.0.0/0' }}" >> $GITHUB_ENV
 
-      - name: Set Terraform env vars
+      - name: 'Inicializar Terraform'
+        id: init
+        working-directory: ./terraform
         run: |
-          echo "TF_VAR_project_id=${{secrets.GCP_PROJECT_ID}}" >> $GITHUB_ENV
-          echo "TF_VAR_ssh_public_key=${{secrets.SSH_PUBLIC_KEY}}" >> $GITHUB_ENV
-          echo "TF_VAR_allowed_ssh_cidr=190.130.148.144/32" >> $GITHUB_ENV
+          terraform init -input=false -backend=false
 
-      - name: Terraform Init
+      - name: 'Validar Formato de Código'
+        id: fmt
         working-directory: ./terraform
-        run: terraform init
+        run: |
+          terraform fmt -check -recursive
+          echo "FMT_CHECK_PASSED=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
 
-      - name: Terraform Plan
+      - name: 'Validar Sintaxis de Terraform'
+        id: validate
         working-directory: ./terraform
-        run: terraform plan -out=tfplan
+        run: |
+          terraform validate -no-color
 
-      - name: Terraform Apply
+      - name: 'Plan de Ejecución'
+        id: plan
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         working-directory: ./terraform
-        run: terraform apply -auto-approve tfplan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+        continue-on-error: true
+
+      - name: 'Mostrar Plan de Ejecución'
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        working-directory: ./terraform
+        run: |
+          cat tfplan.txt
+
+      - name: 'Aplicar Cambios (Solo en main)'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: ./terraform
+        run: |
+          terraform apply -auto-approve -input=false tfplan
+
+      - name: 'Mostrar Salidas de Terraform'
+        if: always() && github.event_name == 'push'
+        working-directory: ./terraform
+        run: |
+          echo "##[group]📋 Resumen del Despliegue"
+          terraform output -raw resumen_despliegue 2>/dev/null || echo "No hay salidas definidas"
+          echo "##[endgroup]"
+
+      - name: 'Limpiar Archivos Temporales'
+        if: always()
+        run: |
+          rm -f $GITHUB_WORKSPACE/gcp_creds.json
+          rm -f $GITHUB_WORKSPACE/terraform/tfplan
+          rm -f $GITHUB_WORKSPACE/terraform/tfplan.txt
+
+      - name: 'Notificar Fallo en el Pipeline'
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const message = `❌ **Error en el despliegue de Infraestructura**
+            
+            **Workflow:** ${{ github.workflow }}
+            **Ejecución:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            **Commit:** [${process.env.GITHUB_SHA}](https://github.com/${{ github.repository }}/commit/${process.env.GITHUB_SHA})`;
+            
+            await github.rest.issues.createComment({
+              issue_number: ${{ github.event.pull_request.number || 1 }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
