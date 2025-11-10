@@ -14,7 +14,7 @@ provider "google" {
   zone        = var.zone
   
   # Usar credenciales desde la variable de entorno
-  credentials = file(exists("gcp_creds.json") ? "gcp_creds.json" : "/dev/null")
+  credentials = file("${path.module}/../.gcp/credentials.json")
   
   # Configuración adicional para evitar errores de tiempo de espera
   scopes = [
