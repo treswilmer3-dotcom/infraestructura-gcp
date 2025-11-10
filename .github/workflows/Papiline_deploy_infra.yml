@@ -26,12 +26,34 @@ jobs:
       - name: Configurar Credenciales GCP
         env:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+          GCP_PROJECT_ID:  ${{ secrets.GCP_PROJECT_ID }}
+          SSH_PUBLIC_KEY:  ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
+          # Crear directorio para credenciales
           mkdir -p $GITHUB_WORKSPACE/.gcp
-          echo "$GCP_CREDENTIALS" | base64 -d > $GITHUB_WORKSPACE/.gcp/credentials.json
-
+          
+          # Guardar credenciales y verificar que se crearon correctamente
+          echo "Verificando credenciales de GCP..."
+          if [ -z "$GCP_CREDENTIALS" ]; then
+            echo "❌ Error: La variable GCP_CREDENTIALS está vacía"
+            exit 1
+          fi
+          
+          # Decodificar y guardar credenciales
+          if ! echo "$GCP_CREDENTIALS" | base64 -d > $GITHUB_WORKSPACE/.gcp/credentials.json 2>/dev/null; then
+            echo "❌ Error: Falló la decodificación de las credenciales"
+            exit 1
+          fi
+          
+          # Verificar que el archivo de credenciales es un JSON válido
+          if ! jq empty $GITHUB_WORKSPACE/.gcp/credentials.json 2>/dev/null; then
+            echo "❌ Error: El archivo de credenciales no es un JSON válido"
+            exit 1
+          fi
+          
+          echo "✅ Credenciales de GCP validadas correctamente"
+          
+          # Configurar variables de entorno
           echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/.gcp/credentials.json" >> $GITHUB_ENV
           echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
           echo "TF_VAR_ssh_public_key=$SSH_PUBLIC_KEY" >> $GITHUB_ENV
@@ -57,3 +79,23 @@ jobs:
       - name: Mostrar Outputs
         working-directory: ./terraform
         run: terraform output || echo "No hay outputs definidos"
+        
+      - name: Limpieza de archivos temporales
+        if: always()
+        run: |
+          echo "🧹 Limpiando archivos temporales..."
+          # Eliminar archivos de credenciales
+          rm -rf $GITHUB_WORKSPACE/.gcp
+          
+          # Eliminar archivos de Terraform generados
+          if [ -d "$GITHUB_WORKSPACE/terraform" ]; then
+            cd $GITHUB_WORKSPACE/terraform
+            rm -f \
+              .terraform.lock.hcl \
+              terraform.tfstate* \
+              tfplan \
+              tfplan.txt \
+              .terraform -r 2>/dev/null || true
+          fi
+          
+          echo "✅ Limpieza completada"
