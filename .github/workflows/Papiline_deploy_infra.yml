@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'terraform/**'
+  workflow_dispatch:
 
 jobs:
   terraform:
@@ -29,31 +30,24 @@ jobs:
           GCP_PROJECT_ID:  ${{ secrets.GCP_PROJECT_ID }}
           SSH_PUBLIC_KEY:  ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
-          # Crear directorio para credenciales
           mkdir -p $GITHUB_WORKSPACE/.gcp
-          
-          # Guardar credenciales y verificar que se crearon correctamente
-          echo "Verificando credenciales de GCP..."
+
           if [ -z "$GCP_CREDENTIALS" ]; then
             echo "❌ Error: La variable GCP_CREDENTIALS está vacía"
             exit 1
           fi
-          
-          # Decodificar y guardar credenciales
-          if ! echo "$GCP_CREDENTIALS" | base64 -d > $GITHUB_WORKSPACE/.gcp/credentials.json 2>/dev/null; then
-            echo "❌ Error: Falló la decodificación de las credenciales"
-            exit 1
-          fi
-          
-          # Verificar que el archivo de credenciales es un JSON válido
+
+          # Guardar credenciales **directamente** sin base64
+          echo "$GCP_CREDENTIALS" > $GITHUB_WORKSPACE/.gcp/credentials.json
+
+          # Validar JSON
           if ! jq empty $GITHUB_WORKSPACE/.gcp/credentials.json 2>/dev/null; then
             echo "❌ Error: El archivo de credenciales no es un JSON válido"
             exit 1
           fi
-          
-          echo "✅ Credenciales de GCP validadas correctamente"
-          
-          # Configurar variables de entorno
+
+          echo "✅ Credenciales cargadas correctamente"
+
           echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/.gcp/credentials.json" >> $GITHUB_ENV
           echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
           echo "TF_VAR_ssh_public_key=$SSH_PUBLIC_KEY" >> $GITHUB_ENV
@@ -61,41 +55,36 @@ jobs:
 
       - name: Terraform Init
         working-directory: ./terraform
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         run: terraform init -input=false
 
       - name: Validar Terraform
         working-directory: ./terraform
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         run: terraform validate -no-color
 
       - name: Terraform Plan
         working-directory: ./terraform
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         run: terraform plan -input=false -no-color -out=tfplan
 
       - name: Terraform Apply (solo en main)
         if: github.ref == 'refs/heads/main'
         working-directory: ./terraform
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         run: terraform apply -auto-approve -input=false tfplan
 
       - name: Mostrar Outputs
         working-directory: ./terraform
         run: terraform output || echo "No hay outputs definidos"
-        
+
       - name: Limpieza de archivos temporales
         if: always()
         run: |
           echo "🧹 Limpiando archivos temporales..."
-          # Eliminar archivos de credenciales
-          rm -rf $GITHUB_WORKSPACE/.gcp
-          
-          # Eliminar archivos de Terraform generados
-          if [ -d "$GITHUB_WORKSPACE/terraform" ]; then
-            cd $GITHUB_WORKSPACE/terraform
-            rm -f \
-              .terraform.lock.hcl \
-              terraform.tfstate* \
-              tfplan \
-              tfplan.txt \
-              .terraform -r 2>/dev/null || true
-          fi
-          
+          rm -rf $GITHUB_WORKSPACE/.gcp || true
           echo "✅ Limpieza completada"
