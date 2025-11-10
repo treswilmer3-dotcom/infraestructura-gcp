@@ -1,158 +1,59 @@
-name: 'Infraestructura como Código - Terraform'
+name: 'Infraestructura - Terraform'
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'terraform/**'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'terraform/**'
-
-# Configuración de concurrencia para evitar despliegues simultáneos
-concurrency:
-  group: terraform-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   terraform:
-    name: 'Terraform'
     runs-on: ubuntu-latest
-    environment: production
     env:
       TF_IN_AUTOMATION: true
       TF_INPUT: false
-      TF_WORKSPACE: default
-    
-    steps:
-      - name: 'Checkout Código'
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Necesario para que funcione la verificación de cambios
 
-      - name: 'Configurar Terraform'
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.5.7'
           terraform_wrapper: false
 
-      - name: 'Configurar Credenciales GCP'
-        id: auth
+      - name: Configurar Credenciales GCP
         env:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
-          # Crear directorio para credenciales
           mkdir -p $GITHUB_WORKSPACE/.gcp
-          
-          # Guardar las credenciales de GCP en un archivo temporal
           echo "$GCP_CREDENTIALS" | base64 -d > $GITHUB_WORKSPACE/.gcp/credentials.json
-          
-          # Configurar variables de entorno necesarias
+
           echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/.gcp/credentials.json" >> $GITHUB_ENV
           echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
           echo "TF_VAR_ssh_public_key=$SSH_PUBLIC_KEY" >> $GITHUB_ENV
           echo "TF_VAR_allowed_ssh_cidr=0.0.0.0/0" >> $GITHUB_ENV
-          
-          # Verificar que el archivo de credenciales se creó correctamente
-          echo "Verificando credenciales de GCP..."
-          if [ -s "$GITHUB_WORKSPACE/.gcp/credentials.json" ]; then
-            echo "✅ Archivo de credenciales creado correctamente"
-            echo "Primeros 100 caracteres del archivo:"
-            head -c 100 "$GITHUB_WORKSPACE/.gcp/credentials.json"
-          else
-            echo "❌ Error: No se pudo crear el archivo de credenciales"
-            echo "Contenido de GCP_CREDENTIALS (primeros 50 caracteres): ${GCP_CREDENTIALS:0:50}..."
-            exit 1
-          fi
 
-      - name: 'Inicializar Terraform'
-        id: init
+      - name: Terraform Init
         working-directory: ./terraform
-        run: |
-          terraform init -input=false -backend=false
+        run: terraform init -input=false
 
-      - name: 'Validar Formato de Código'
-        id: fmt
+      - name: Validar Terraform
         working-directory: ./terraform
-        run: |
-          terraform fmt -check -recursive
-          echo "FMT_CHECK_PASSED=$?" >> $GITHUB_OUTPUT
-        continue-on-error: true
+        run: terraform validate -no-color
 
-      - name: 'Validar Sintaxis de Terraform'
-        id: validate
+      - name: Terraform Plan
         working-directory: ./terraform
-        run: |
-          terraform validate -no-color
+        run: terraform plan -input=false -no-color -out=tfplan
 
-      - name: 'Plan de Ejecución'
-        id: plan
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+      - name: Terraform Apply (solo en main)
+        if: github.ref == 'refs/heads/main'
         working-directory: ./terraform
-        run: |
-          terraform plan -input=false -no-color -out=tfplan
-          terraform show -no-color tfplan > tfplan.txt
-        continue-on-error: true
+        run: terraform apply -auto-approve -input=false tfplan
 
-      - name: 'Mostrar Plan de Ejecución'
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+      - name: Mostrar Outputs
         working-directory: ./terraform
-        run: |
-          cat tfplan.txt
-
-      - name: 'Aplicar Cambios (Solo en main)'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        working-directory: ./terraform
-        run: |
-          # Verificar el plan antes de aplicar
-          if [ ! -f "tfplan" ]; then
-            echo "❌ Error: No se encontró el archivo de plan"
-            exit 1
-          fi
-          
-          echo "🔍 Mostrando resumen del plan..."
-          terraform show -no-color tfplan
-          
-          echo "🚀 Aplicando cambios..."
-          terraform apply -auto-approve -input=false tfplan || {
-            echo "❌ Error al aplicar los cambios"
-            exit 1
-          }
-          
-          echo "✅ Cambios aplicados exitosamente"
-
-      - name: 'Mostrar Salidas de Terraform'
-        if: always() && github.event_name == 'push'
-        working-directory: ./terraform
-        run: |
-          echo "##[group]📋 Resumen del Despliegue"
-          terraform output -raw resumen_despliegue 2>/dev/null || echo "No hay salidas definidas"
-          echo "##[endgroup]"
-
-      - name: 'Limpiar Archivos Temporales'
-        if: always()
-        run: |
-          rm -f $GITHUB_WORKSPACE/gcp_creds.json
-          rm -f $GITHUB_WORKSPACE/terraform/tfplan
-          rm -f $GITHUB_WORKSPACE/terraform/tfplan.txt
-
-      - name: 'Notificar Fallo en el Pipeline'
-        if: failure()
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const message = `❌ **Error en el despliegue de Infraestructura**
-            
-            **Workflow:** ${{ github.workflow }}
-            **Ejecución:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            **Commit:** [${process.env.GITHUB_SHA}](https://github.com/${{ github.repository }}/commit/${process.env.GITHUB_SHA})`;
-            
-            await github.rest.issues.createComment({
-              issue_number: ${{ github.event.pull_request.number || 1 }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: message
-            });
+        run: terraform output || echo "No hay outputs definidos"
