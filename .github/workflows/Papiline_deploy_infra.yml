@@ -24,11 +24,12 @@ jobs:
       TF_IN_AUTOMATION: true
       TF_INPUT: false
       TF_WORKSPACE: default
-      GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
     
     steps:
       - name: 'Checkout Código'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para que funcione la verificación de cambios
 
       - name: 'Configurar Terraform'
         uses: hashicorp/setup-terraform@v2
@@ -39,11 +40,23 @@ jobs:
       - name: 'Configurar Credenciales GCP'
         id: auth
         run: |
-          echo "${{ secrets.GCP_SA_KEY }}" > $GITHUB_WORKSPACE/gcp_creds.json
+          # Guardar las credenciales de GCP en un archivo temporal
+          echo "${{ secrets.GCP_CREDENTIALS }}" > $GITHUB_WORKSPACE/gcp_creds.json
+          
+          # Configurar variables de entorno necesarias
           echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp_creds.json" >> $GITHUB_ENV
           echo "TF_VAR_project_id=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
           echo "TF_VAR_ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" >> $GITHUB_ENV
           echo "TF_VAR_allowed_ssh_cidr=${{ github.event.client_payload.ip || '0.0.0.0/0' }}" >> $GITHUB_ENV
+          
+          # Verificar que el archivo de credenciales se creó correctamente
+          echo "Verificando credenciales de GCP..."
+          if [ -s "$GITHUB_WORKSPACE/gcp_creds.json" ]; then
+            echo "✅ Archivo de credenciales creado correctamente"
+          else
+            echo "❌ Error: No se pudo crear el archivo de credenciales"
+            exit 1
+          fi
 
       - name: 'Inicializar Terraform'
         id: init
@@ -84,7 +97,22 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         working-directory: ./terraform
         run: |
-          terraform apply -auto-approve -input=false tfplan
+          # Verificar el plan antes de aplicar
+          if [ ! -f "tfplan" ]; then
+            echo "❌ Error: No se encontró el archivo de plan"
+            exit 1
+          fi
+          
+          echo "🔍 Mostrando resumen del plan..."
+          terraform show -no-color tfplan
+          
+          echo "🚀 Aplicando cambios..."
+          terraform apply -auto-approve -input=false tfplan || {
+            echo "❌ Error al aplicar los cambios"
+            exit 1
+          }
+          
+          echo "✅ Cambios aplicados exitosamente"
 
       - name: 'Mostrar Salidas de Terraform'
         if: always() && github.event_name == 'push'
